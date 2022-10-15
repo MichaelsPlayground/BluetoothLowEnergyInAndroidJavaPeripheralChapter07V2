@@ -27,10 +27,10 @@ import de.androidcrypto.bluetoothlowenergyinandroidjavaperipheral.ble.callbacks.
  * @date 2015-12-21
  */
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity2 extends AppCompatActivity {
 
     /** Constants **/
-    private static final String TAG = MainActivity.class.getSimpleName();
+    private static final String TAG = MainActivity2.class.getSimpleName();
     private static final int REQUEST_ENABLE_BT = 1;
 
     /** Bluetooth Stuff **/
@@ -55,6 +55,8 @@ public class MainActivity extends AppCompatActivity {
         // notify when bluetooth is turned on or off
         IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
         registerReceiver(mBleBroadcastReceiver, filter);
+
+
         loadUI();
     }
 
@@ -62,7 +64,6 @@ public class MainActivity extends AppCompatActivity {
     public void onPause() {
         super.onPause();
         // stop advertising when the activity pauses
-        System.out.println("MainActivity: onPause stopAdvertising");
         mMyBlePeripheral.stopAdvertising();
     }
 
@@ -105,6 +106,7 @@ public class MainActivity extends AppCompatActivity {
             finish();
         }
 
+
         mBluetoothOnSwitch.setChecked(mMyBlePeripheral.getBluetoothAdapter().isEnabled());
 
         // should prompt user to open settings if Bluetooth is not enabled.
@@ -122,7 +124,6 @@ public class MainActivity extends AppCompatActivity {
      */
     public void startAdvertising() {
         Log.v(TAG, "starting advertising...");
-        System.out.println("MainActivity startAdvertising");
         try {
             mMyBlePeripheral.startAdvertising();
         } catch (Exception e) {
@@ -244,7 +245,6 @@ public class MainActivity extends AppCompatActivity {
         }
         public void onAdvertisingStopped() {
             Log.v(TAG, "Advertising stopped");
-            System.out.println("MainActivity: Advertising stopped");
 
             runOnUiThread(new Runnable() {
                 @Override

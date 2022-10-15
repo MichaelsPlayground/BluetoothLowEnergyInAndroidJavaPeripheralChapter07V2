@@ -1,6 +1,8 @@
 package de.androidcrypto.bluetoothlowenergyinandroidjavaperipheral;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.AdvertiseCallback;
@@ -8,6 +10,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Switch;
@@ -16,6 +19,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.app.ActivityCompat;
 
 import de.androidcrypto.bluetoothlowenergyinandroidjavaperipheral.ble.MyBlePeripheral;
 import de.androidcrypto.bluetoothlowenergyinandroidjavaperipheral.ble.callbacks.BlePeripheralCallback;
@@ -27,10 +31,10 @@ import de.androidcrypto.bluetoothlowenergyinandroidjavaperipheral.ble.callbacks.
  * @date 2015-12-21
  */
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivityChapter06 extends AppCompatActivity {
 
     /** Constants **/
-    private static final String TAG = MainActivity.class.getSimpleName();
+    private static final String TAG = MainActivityChapter06.class.getSimpleName();
     private static final int REQUEST_ENABLE_BT = 1;
 
     /** Bluetooth Stuff **/
@@ -43,11 +47,37 @@ public class MainActivity extends AppCompatActivity {
             mAdvertisingSwitch,
             mCentralConnectedSwitch;
 
+    /**
+     * This block is for requesting permissions up to Android 12+
+     *
+     */
+
+    private static final int PERMISSIONS_REQUEST_CODE = 191;
+    private static final String[] BLE_PERMISSIONS = new String[]{
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+    };
+    @SuppressLint("InlinedApi")
+    private static final String[] ANDROID_12_BLE_PERMISSIONS = new String[]{
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+            Manifest.permission.ACCESS_FINE_LOCATION
+    };
+
+    public static void requestBlePermissions(Activity activity, int requestCode) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            ActivityCompat.requestPermissions(activity, ANDROID_12_BLE_PERMISSIONS, requestCode);
+        else
+            ActivityCompat.requestPermissions(activity, BLE_PERMISSIONS, requestCode);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        requestBlePermissions(this, PERMISSIONS_REQUEST_CODE);
 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -55,6 +85,8 @@ public class MainActivity extends AppCompatActivity {
         // notify when bluetooth is turned on or off
         IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
         registerReceiver(mBleBroadcastReceiver, filter);
+
+
         loadUI();
     }
 
@@ -62,7 +94,6 @@ public class MainActivity extends AppCompatActivity {
     public void onPause() {
         super.onPause();
         // stop advertising when the activity pauses
-        System.out.println("MainActivity: onPause stopAdvertising");
         mMyBlePeripheral.stopAdvertising();
     }
 
@@ -78,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
         unregisterReceiver(mBleBroadcastReceiver);
     }
 
+
     /**
      * Load UI components
      */
@@ -89,6 +121,8 @@ public class MainActivity extends AppCompatActivity {
 
         mAdvertisingNameTV.setText(MyBlePeripheral.ADVERTISING_NAME);
     }
+
+
 
     /**
      * Initialize the Bluetooth Radio
@@ -104,6 +138,7 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, e.getMessage());
             finish();
         }
+
 
         mBluetoothOnSwitch.setChecked(mMyBlePeripheral.getBluetoothAdapter().isEnabled());
 
@@ -122,7 +157,6 @@ public class MainActivity extends AppCompatActivity {
      */
     public void startAdvertising() {
         Log.v(TAG, "starting advertising...");
-        System.out.println("MainActivity startAdvertising");
         try {
             mMyBlePeripheral.startAdvertising();
         } catch (Exception e) {
@@ -244,7 +278,6 @@ public class MainActivity extends AppCompatActivity {
         }
         public void onAdvertisingStopped() {
             Log.v(TAG, "Advertising stopped");
-            System.out.println("MainActivity: Advertising stopped");
 
             runOnUiThread(new Runnable() {
                 @Override

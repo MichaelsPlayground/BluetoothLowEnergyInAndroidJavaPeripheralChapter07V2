@@ -1,12 +1,10 @@
 package de.androidcrypto.bluetoothlowenergyinandroidjavaperipheral.ble;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattServer;
 import android.bluetooth.BluetoothGattServerCallback;
 import android.bluetooth.BluetoothGattService;
@@ -17,7 +15,6 @@ import android.bluetooth.le.AdvertiseSettings;
 import android.bluetooth.le.BluetoothLeAdvertiser;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.os.BatteryManager;
 import android.os.ParcelUuid;
 import android.util.Log;
 
@@ -26,11 +23,8 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.UUID;
 
-import static android.content.Context.BATTERY_SERVICE;
-
-import androidx.core.app.ActivityCompat;
-
 import de.androidcrypto.bluetoothlowenergyinandroidjavaperipheral.ble.callbacks.BlePeripheralCallback;
+import de.androidcrypto.bluetoothlowenergyinandroidjavaperipheral.utilities.DataConverter;
 
 /**
  * This class creates a local Bluetooth Peripheral
@@ -38,52 +32,49 @@ import de.androidcrypto.bluetoothlowenergyinandroidjavaperipheral.ble.callbacks.
  * @author Tony Gaitatzis backupbrain@gmail.com
  * @date 2016-03-06
  */
-public class MyBlePeripheral {
+
+public class MyBlePeripheral07 {
+
     /** Constants **/
     private static final String TAG = MyBlePeripheral.class.getSimpleName();
 
-    public static final String CHARSET = "ASCII";
-
-    private static final int BATTERY_STATUS_CHECK_TIME_MS = 5 * 1000; // 5 minutes
-
-    private static final String MODEL_NUMBER = "1AB2";
-    private static final String SERIAL_NUMBER = "1234";
 
     /** Peripheral and GATT Profile **/
-    public static final String ADVERTISING_NAME = "MyDevice07";
+    public static final String ADVERTISING_NAME =  "MyDevice";
 
-    public static final UUID DEVICE_INFORMATION_SERVICE_UUID = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb");
-    public static final UUID BATTERY_LEVEL_SERVICE = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb");
+    public static final UUID SERVICE_UUID = UUID.fromString("0000180c-0000-1000-8000-00805f9b34fb");
+    public static final UUID CHARACTERISTIC_UUID = UUID.fromString("00002a56-0000-1000-8000-00805f9b34fb");
 
-    public static final UUID DEVICE_NAME_CHARACTERISTIC_UUID = UUID.fromString("00002a00-0000-1000-8000-00805f9b34fb");
-    public static final UUID MODEL_NUMBER_CHARACTERISTIC_UUID = UUID.fromString("00002a24-0000-1000-8000-00805f9b34fb");
-    public static final UUID SERIAL_NUMBER_CHARACTERISTIC_UUID = UUID.fromString("00002a04-0000-1000-8000-00805f9b34fb");
+    private static final int CHARACTERISTIC_LENGTH = 20;
 
-    public static final UUID BATTERY_LEVEL_CHARACTERISTIC_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb");
 
     /** Advertising settings **/
 
-    // advertising mode
+    // advertising mode can be one of:
+    // - ADVERTISE_MODE_BALANCED,
+    // - ADVERTISE_MODE_LOW_LATENCY,
+    // - ADVERTISE_MODE_LOW_POWER
     int mAdvertisingMode = AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY;
 
-    // transmission power mode
+    // transmission power mode can be one of:
+    // - ADVERTISE_TX_POWER_HIGH
+    // - ADVERTISE_TX_POWER_MEDIUM
+    // - ADVERTISE_TX_POWER_LOW
+    // - ADVERTISE_TX_POWER_ULTRA_LOW
     int mTransmissionPower = AdvertiseSettings.ADVERTISE_TX_POWER_HIGH;
+
 
 
     /** Callback Handlers **/
     public BlePeripheralCallback mBlePeripheralCallback;
 
     /** Bluetooth Stuff **/
-    private Context mContext;
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothLeAdvertiser mBluetoothAdvertiser;
 
     private BluetoothGattServer mGattServer;
-    private BluetoothGattService mDeviceInformationService, mBatteryLevelService;
-    private BluetoothGattCharacteristic mDeviceNameCharacteristic,
-            mModelNumberCharacteristic,
-            mSerialNumberCharacteristic,
-            mBatteryLevelCharactersitic;
+    private BluetoothGattService mService;
+    private BluetoothGattCharacteristic mCharacteristic;
 
 
     /**
@@ -94,9 +85,8 @@ public class MyBlePeripheral {
      * @throws Exception Exception thrown if Bluetooth is not supported
      */
     @SuppressLint("MissingPermission")
-    public MyBlePeripheral(final Context context, BlePeripheralCallback blePeripheralCallback) throws Exception {
+    public void MyBlePeripheral(final Context context, BlePeripheralCallback blePeripheralCallback) throws Exception {
         mBlePeripheralCallback = blePeripheralCallback;
-        mContext = context;
 
         // make sure Android device supports Bluetooth Low Energy
         if (!context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
@@ -109,6 +99,7 @@ public class MyBlePeripheral {
         mGattServer = bluetoothManager.openGattServer(context, mGattServerCallback);
         mBluetoothAdapter = bluetoothManager.getAdapter();
 
+        // Beware: this function doesn't work on some systems
         if(!mBluetoothAdapter.isMultipleAdvertisementSupported()) {
             throw new Exception ("Peripheral mode not supported");
         }
@@ -132,69 +123,42 @@ public class MyBlePeripheral {
         return mBluetoothAdapter;
     }
 
-
     /**
-     * Get the battery level
-     */
-    public int getBatteryLevel() {
-        BatteryManager batteryManager = (BatteryManager)mContext.getSystemService(BATTERY_SERVICE);
-        return batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
-    }
-
-    /**
-     * Set up the GATT profile
+     * Set up the Advertising name and GATT profile
      */
     @SuppressLint("MissingPermission")
-    private void setupDevice() throws Exception {
-        // build Characteristics
-        mDeviceInformationService = new BluetoothGattService(DEVICE_INFORMATION_SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY);
+    private void setupDevice() {
+        mService = new BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY);
 
-        mDeviceNameCharacteristic = new BluetoothGattCharacteristic(
-                DEVICE_NAME_CHARACTERISTIC_UUID,
-                BluetoothGattCharacteristic.PROPERTY_READ,
-                BluetoothGattCharacteristic.PERMISSION_READ);
-        mModelNumberCharacteristic = new BluetoothGattCharacteristic(
-                MODEL_NUMBER_CHARACTERISTIC_UUID,
-                BluetoothGattCharacteristic.PROPERTY_READ,
-                BluetoothGattCharacteristic.PERMISSION_READ);
-        mSerialNumberCharacteristic = new BluetoothGattCharacteristic(
-                SERIAL_NUMBER_CHARACTERISTIC_UUID,
+        mCharacteristic = new BluetoothGattCharacteristic(
+                CHARACTERISTIC_UUID,
                 BluetoothGattCharacteristic.PROPERTY_READ,
                 BluetoothGattCharacteristic.PERMISSION_READ);
 
-        mBatteryLevelService = new BluetoothGattService(BATTERY_LEVEL_SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY);
 
-        mBatteryLevelCharactersitic = new BluetoothGattCharacteristic(
-                BATTERY_LEVEL_CHARACTERISTIC_UUID,
-                BluetoothGattCharacteristic.PROPERTY_READ,
-                BluetoothGattCharacteristic.PERMISSION_READ);
+        mService.addCharacteristic(mCharacteristic);
 
-        mDeviceInformationService.addCharacteristic(mDeviceNameCharacteristic);
-        mDeviceInformationService.addCharacteristic(mModelNumberCharacteristic);
-        mDeviceInformationService.addCharacteristic(mSerialNumberCharacteristic);
-
-        mBatteryLevelService.addCharacteristic(mBatteryLevelCharactersitic);
-
-        // put in fake values for the Characteristic.
-        mDeviceNameCharacteristic.setValue(ADVERTISING_NAME.getBytes(CHARSET));
-        mModelNumberCharacteristic.setValue(MODEL_NUMBER.getBytes(CHARSET));
-        mSerialNumberCharacteristic.setValue(SERIAL_NUMBER.getBytes(CHARSET));
-
-        // add Services to Peripheral
-        mGattServer.addService(mDeviceInformationService);
-        mGattServer.addService(mBatteryLevelService);
+        mGattServer.addService(mService);
 
 
-        // update the battery level every BATTERY_STATUS_CHECK_TIME_MS milliseconds
-        TimerTask updateBatteryTask = new TimerTask() {
+        // write random characters to the read Characteristic every timerInterval_ms
+        int timerInterval_ms = 1000;
+        TimerTask updateReadCharacteristicTask = new TimerTask() {
             @Override
             public void run() {
-                mBatteryLevelCharactersitic.setValue(getBatteryLevel(),BluetoothGattCharacteristic.FORMAT_UINT8, 0);
+                int stringLength = (int) (Math.random() % CHARACTERISTIC_LENGTH);
+                String randomString = DataConverter.getRandomString(stringLength);
+                try {
+                    mCharacteristic.setValue(randomString);
+
+                } catch (Exception e) {
+                    Log.e(TAG, "Error converting String to byte array");
+                }
+
             }
         };
         Timer randomStringTimer = new Timer();
-        // schedule the battery update and run it once immediately
-        randomStringTimer.schedule(updateBatteryTask, 0, BATTERY_STATUS_CHECK_TIME_MS);
+        randomStringTimer.schedule(updateReadCharacteristicTask, 0, timerInterval_ms);
 
     }
 
@@ -204,7 +168,7 @@ public class MyBlePeripheral {
      * @throws Exception Exception thrown if Bluetooth Peripheral mode is not supported
      */
     @SuppressLint("MissingPermission")
-    public void startAdvertising() throws Exception {
+    public void startAdvertising() {
         // set the device name
         mBluetoothAdapter.setName(ADVERTISING_NAME);
 
@@ -215,18 +179,25 @@ public class MyBlePeripheral {
                 .setConnectable(true)
                 .build();
 
+
         AdvertiseData.Builder advertiseBuilder = new AdvertiseData.Builder();
         // set advertising name
         advertiseBuilder.setIncludeDeviceName(true);
 
-        // add Services to Advertising Data
-        advertiseBuilder.addServiceUuid(new ParcelUuid(DEVICE_INFORMATION_SERVICE_UUID));
-        advertiseBuilder.addServiceUuid(new ParcelUuid(BATTERY_LEVEL_SERVICE));
+        // add Services
+        advertiseBuilder.addServiceUuid(new ParcelUuid(SERVICE_UUID));
 
         AdvertiseData advertiseData = advertiseBuilder.build();
 
         // begin advertising
-        mBluetoothAdvertiser.startAdvertising( advertiseSettings, advertiseData, mAdvertiseCallback );
+        try {
+            mBluetoothAdvertiser.startAdvertising( advertiseSettings, advertiseData, mAdvertiseCallback );
+        } catch (Exception e) {
+            Log.e(TAG, "could not start advertising");
+            Log.e(TAG, e.getMessage());
+            e.printStackTrace();
+        }
+
     }
 
 
@@ -242,6 +213,16 @@ public class MyBlePeripheral {
     }
 
 
+    /**
+     * Check if a Characetristic supports read permissions
+     * @return Returns <b>true</b> if property is writable
+     */
+    public static boolean isCharacteristicReadable(BluetoothGattCharacteristic characteristic) {
+        return (characteristic.getProperties() & (BluetoothGattCharacteristic.PROPERTY_READ)) != 0;
+    }
+
+
+
     private final BluetoothGattServerCallback mGattServerCallback = new BluetoothGattServerCallback() {
         @Override
         public void onConnectionStateChange(BluetoothDevice device, final int status, int newState) {
@@ -251,7 +232,6 @@ public class MyBlePeripheral {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 if (newState == BluetoothGatt.STATE_CONNECTED) {
                     mBlePeripheralCallback.onCentralConnected(device);
-                    // todo in original code stopAdvertising is active, I commented it out to enable characteristic reading
                     stopAdvertising();
 
 
@@ -265,6 +245,28 @@ public class MyBlePeripheral {
                 }
             }
 
+        }
+
+        @SuppressLint("MissingPermission")
+        @Override
+        public void onCharacteristicReadRequest(BluetoothDevice device, int requestId, int offset,
+                                                BluetoothGattCharacteristic characteristic) {
+            super.onCharacteristicReadRequest(device, requestId, offset, characteristic);
+            Log.d(TAG, "Device tried to read characteristic: " + characteristic.getUuid());
+            Log.d(TAG, "Value: " + Arrays.toString(characteristic.getValue()));
+
+            if (characteristic.getUuid() == mCharacteristic.getUuid()) {
+                if (offset < CHARACTERISTIC_LENGTH) {
+                    if (offset != 0) {
+                        mGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_INVALID_OFFSET, offset, characteristic.getValue());
+                    } else {
+                        mGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, characteristic.getValue());
+                    }
+                } else {
+                    Log.d(TAG, "invalid offset when trying to read Characteristic");
+
+                }
+            }
         }
 
     };
@@ -285,5 +287,6 @@ public class MyBlePeripheral {
             mBlePeripheralCallback.onAdvertisingFailed(errorCode);
         }
     };
+
 
 }
